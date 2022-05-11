@@ -1,11 +1,16 @@
+import os
 import sys
-import time
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QDesktopWidget, QTextEdit
+import cv2
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QDesktopWidget, QTextEdit, QFileDialog 
 from PyQt5.QtWebEngineWidgets import QWebEngineView #pip install PyQtWebEngine to be able to import this
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtGui
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import pyqtSlot
-from resources import resources
+from PyQt5.QtCore import pyqtSlot, Qt
+from resources import resources #for qrc resources
+from screeninfo import get_monitors
+from pynput.mouse import Controller
+from PIL import ImageGrab
+import numpy as np
 
 class App(QWidget):
 
@@ -16,6 +21,8 @@ class App(QWidget):
         self.top = 10
         self.width = 700
         self.height = 400
+        self.img = None
+        self.snipWidget = SnipWidget(self) # object of SnipWidget Class
         self.initUI()
     
     def initUI(self):
@@ -56,13 +63,27 @@ class App(QWidget):
         self.move(qPoint) # moves current application's window to created window's location
 
 
-    @pyqtSlot() #decorator function that runs some built-in code before (and after) snip()'s execution 
+    @pyqtSlot() #decorator function that runs some built-in code (used for buttons) before (and after) snip()'s execution 
     def snipImg(self):
-        print('CODE TO SNIP IMAGE')
+        self.close()
+        self.snipWidget.snip()
+
+    def snipImg(self):
+        self.close()
+        self.snipWidget.snip()
+
+    def returnFromSnip(self, img=None):
+         self.show()
+
 
     @pyqtSlot()
     def loadImg(self):
-        print('CODE TO load IMAGE FROM LOCAL FILE')
+        currDirectory = os.path.abspath(os.getcwd()) # gets path of current py file
+        imgsDirectory = os.path.join(currDirectory, "tests") # concatenates tests folder to that path
+        fname = QFileDialog.getOpenFileName(self, "Open file", imgsDirectory, "Image files (*.jpg *.png)") # "fname" is a tuple consisting of the chosen path e.g. "C:\img.png" and the string "Image files (*.jpg *.png)" 
+        self.img = cv2.imread(fname[0])
+
+
 
     @pyqtSlot() 
     def displayPrediction(self, prediction = None):
@@ -88,6 +109,93 @@ class App(QWidget):
         """.format(equation=prediction)
         
         self.webView.setHtml(pageSource)
+
+
+
+class SnipWidget(QMainWindow):
+    isSnipping = False
+
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+
+        monitos = get_monitors()
+        bboxes = np.array([[m.x, m.y, m.width, m.height] for m in monitos])
+        x, y, _, _ = bboxes.min(0)
+        w, h = bboxes[:, [0, 2]].sum(1).max(), bboxes[:, [1, 3]].sum(1).max()
+        self.setGeometry(x, y, w-x, h-y)
+
+        self.begin = QtCore.QPoint()
+        self.end = QtCore.QPoint()
+
+        self.mouse = Controller()
+
+    def snip(self):
+        self.isSnipping = True
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        QApplication.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CrossCursor))
+
+        self.show()
+
+    def paintEvent(self, event):
+        if self.isSnipping:
+            brushColor = (0, 180, 255, 100)
+            lw = 3
+            opacity = 0.3
+        else:
+            brushColor = (255, 255, 255, 0)
+            lw = 3
+            opacity = 0
+
+        self.setWindowOpacity(opacity)
+        qp = QtGui.QPainter(self)
+        qp.setPen(QtGui.QPen(QtGui.QColor('black'), lw))
+        qp.setBrush(QtGui.QColor(*brushColor))
+        qp.drawRect(QtCore.QRect(self.begin, self.end))
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
+            QApplication.restoreOverrideCursor()
+            self.close()
+            self.parent.show()
+        event.accept()
+
+    def mousePressEvent(self, event):
+        self.startPos = self.mouse.position
+
+        self.begin = event.pos()
+        self.end = self.begin
+        self.update()
+
+    def mouseMoveEvent(self, event):
+        self.end = event.pos()
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        self.isSnipping = False
+        QApplication.restoreOverrideCursor()
+
+        startPos = self.startPos
+        endPos = self.mouse.position
+
+        x1 = min(startPos[0], endPos[0])
+        y1 = min(startPos[1], endPos[1])
+        x2 = max(startPos[0], endPos[0])
+        y2 = max(startPos[1], endPos[1])
+
+        self.repaint()
+        QApplication.processEvents()
+        img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
+        QApplication.processEvents()
+
+        self.close()
+        self.begin = QtCore.QPoint()
+        self.end = QtCore.QPoint()
+        self.parent.returnFromSnip(img)
+
+
+
+
 
 if __name__ == '__main__':
     appPtr = QtCore.QCoreApplication.instance() # this pointer and the if statement are done to allow this to be run in an .ipynb file

@@ -1,5 +1,8 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
+    <qresource prefix="icons">
+        <file alias="Pi-Black.svg">resources/Pi-Black.svg</file>
+    </qresource>
     <qresource>
         <file alias="MathJax.js">resources/MathJax.js</file>
     </qresource>

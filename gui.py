@@ -1,18 +1,22 @@
 import os
 import sys
+import time
 import cv2
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QDesktopWidget, QTextEdit, QFileDialog 
-from PyQt5.QtWebEngineWidgets import QWebEngineView #pip install PyQtWebEngine to be able to import this
+import pickle
+from imgPreProcess import extractSymbols # Imports extractSymbols() from imgPreProcess.py to process the input image to be compatible with the NN model
+from resources import resources # Imports resources.py for qrc resources to work
+from tensorflow import keras
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QPushButton, QDesktopWidget, QTextEdit, QFileDialog 
+from PyQt5.QtWebEngineWidgets import QWebEngineView # pip install PyQtWebEngine to be able to import this
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSlot, Qt
-from resources import resources #for qrc resources
 from screeninfo import get_monitors
 from pynput.mouse import Controller
 from PIL import ImageGrab
 import numpy as np
 
-class App(QWidget):
+class App(QMainWindow): # Using QMainWindow as super class because it contains methods not present in the base class "QWidgets" like "self.setCentralWidget()"
 
     def __init__(self):
         super().__init__()
@@ -22,36 +26,57 @@ class App(QWidget):
         self.width = 700
         self.height = 400
         self.img = None
-        self.snipWidget = SnipWidget(self) # object of SnipWidget Class
+        self.webView = None
+        self.snipWidget = SnipWidget(self) # object of SnipWidget Class, "self" here is this current "App" object that will be sent to the created SnipWidget object
+        self.model = keras.models.load_model("nnModel") 
+        with open("numsToLatex.pickle", 'rb') as f:
+            self.numsToLatex = pickle.load(f)
         self.initUI()
     
     def initUI(self):
         self.setWindowTitle(self.title)
+        QApplication.setWindowIcon(QtGui.QIcon('resources/Pi-Black.svg')) # ":/icons/Pi-Black.svg" (from qrc resources) didn't work
         self.setGeometry(self.left, self.top, self.width, self.height)
         self.centerApp() # user defined
 
         # Create LaTeX display
         self.webView = QWebEngineView()
         self.webView.setHtml("")
-        self.webView.setMinimumHeight(80)
-        self.webView.show() # displays latex in a new window
+        self.webView.setMinimumHeight(40)
 
         # Creates Textbox
         self.textbox = QTextEdit(self)
         self.textbox.textChanged.connect(self.displayPrediction)
-        self.textbox.setGeometry(50, 180, 600, 80)
+        self.textbox.setMinimumHeight(40)
 
         # Creates snip button
         btnSnip = QPushButton('Snip', self)
         btnSnip.setToolTip('This is to snip an image of a math equation')
-        btnSnip.setGeometry(100, 300, 200, 50)
+        btnSnip.setMinimumHeight(40)
         btnSnip.clicked.connect(self.snipImg) 
 
         # Creates load image button
         btnLoad = QPushButton("Load Image", self)
         btnLoad.setToolTip('This is to load an image of a math equation from a folder locally')
-        btnLoad.setGeometry(400, 300, 200, 50)
+        btnLoad.setMinimumHeight(40)
         btnLoad.clicked.connect(self.loadImg) 
+
+        # Create Vertical & Horizontal layouts to main window (centralWidget)
+        centralWidget = QWidget()
+        centralWidget.setMinimumWidth(200)
+        self.setCentralWidget(centralWidget)
+
+        vBox = QVBoxLayout(centralWidget)
+        vBox.addWidget(self.webView, stretch=4)
+        vBox.addWidget(self.textbox, stretch=2)
+
+        hBox = QHBoxLayout()
+        hBox.addWidget(btnSnip)
+        hBox.addWidget(btnLoad)
+        vBox.addLayout(hBox)
+
+        settings = QFormLayout()
+        vBox.addLayout(settings)
 
         self.show()
     
@@ -68,21 +93,26 @@ class App(QWidget):
         self.close()
         self.snipWidget.snip()
 
-    def snipImg(self):
-        self.close()
-        self.snipWidget.snip()
-
-    def returnFromSnip(self, img=None):
-         self.show()
-
 
     @pyqtSlot()
     def loadImg(self):
         currDirectory = os.path.abspath(os.getcwd()) # gets path of current py file
         imgsDirectory = os.path.join(currDirectory, "tests") # concatenates tests folder to that path
         fname = QFileDialog.getOpenFileName(self, "Open file", imgsDirectory, "Image files (*.jpg *.png)") # "fname" is a tuple consisting of the chosen path e.g. "C:\img.png" and the string "Image files (*.jpg *.png)" 
-        self.img = cv2.imread(fname[0])
+        self.img =  cv2.imread(fname[0]) # setting the img attribute in case it will be used later
+        self.predictLatex(self.img)
 
+    def predictLatex(self, img=None):
+        self.show() # Displays the main GUI window after it has been closed by snipImg()
+        symbols = extractSymbols(imgOrig=img, showSteps=False, returnSteps=False) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
+        prediction = ""
+        for symbol in symbols:
+            label = np.argmax(self.model.predict(symbol))
+            latex = self.numsToLatex[label]
+            print(latex) # Debugging
+            prediction += latex
+        print(prediction)
+        self.displayPrediction(prediction)
 
 
     @pyqtSlot() 
@@ -91,11 +121,10 @@ class App(QWidget):
             self.textbox.setText("${equation}$".format(equation=prediction))
         else:
             prediction = self.textbox.toPlainText().strip('$')
-        print(prediction) #replace 'src=' value below with this: https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML
         pageSource = """
         <html>
             <head>
-                <script type="text/javascript" src="qrc:MathJax.js">     
+                <script type="text/javascript" src="qrc:MathJax.js"> <!-- if qrc is not working, replace 'src=' value with this: https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML -->
                 </script>
             </head>
             <body>
@@ -117,81 +146,81 @@ class SnipWidget(QMainWindow):
 
     def __init__(self, parent):
         super().__init__()
-        self.parent = parent
+        self.parent = parent # "parent" here is the "App" object that called this class
 
-        monitos = get_monitors()
-        bboxes = np.array([[m.x, m.y, m.width, m.height] for m in monitos])
-        x, y, _, _ = bboxes.min(0)
-        w, h = bboxes[:, [0, 2]].sum(1).max(), bboxes[:, [1, 3]].sum(1).max()
-        self.setGeometry(x, y, w-x, h-y)
+        monitos = get_monitors() # gets monitor's x and y position of top left rectangle corner, and the rectangle's (montior's) width and height
+        bboxes = np.array([[m.x, m.y, m.width, m.height] for m in monitos]) # the for loop is in case there are multiple monitors
+        x, y, _, _ = bboxes.min(0) # retrieves the positions of the smallest x,y pair ("0" means sort on 0-axis: [1,2,3,4] and [1,2,0,8] will return [1,2,3,4] array as 0 < 3 but 4 < 8, while min(1) will return [1,0])
+        w, h = bboxes[:, [0, 2]].sum(1).max(), bboxes[:, [1, 3]].sum(1).max() # obtains max xPoint+width and max yPoint+height which corresponds to a width and height covering all the monitors
+        self.setGeometry(x, y, w-x, h-y) # sets the new snipping window with obtained x,y,w,h
 
         self.begin = QtCore.QPoint()
         self.end = QtCore.QPoint()
 
-        self.mouse = Controller()
+        self.mouse = Controller() # a controller for sending virtual mouse events to the system. Useful attribute: "position"
 
     def snip(self):
         self.isSnipping = True
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
-        QApplication.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CrossCursor))
+        self.setWindowFlags(Qt.WindowStaysOnTopHint) # hints are used to customize the appearance of top-level windows, while "WindowStaysOnTopHint" is a flag that Informs the window system that the snipping window should stay on top of all other windows
+        QApplication.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CrossCursor)) # changes cursor to look like a "+" (Cross Cursor)
 
-        self.show()
+        self.show() # displays the snipping window
 
     def paintEvent(self, event):
         if self.isSnipping:
-            brushColor = (0, 180, 255, 100)
-            lw = 3
+            brushColor = (51, 153, 255, 100) # red, green, blue, alpha
             opacity = 0.3
         else:
             brushColor = (255, 255, 255, 0)
-            lw = 3
             opacity = 0
+        lineWidth = 3
 
         self.setWindowOpacity(opacity)
         qp = QtGui.QPainter(self)
-        qp.setPen(QtGui.QPen(QtGui.QColor('black'), lw))
-        qp.setBrush(QtGui.QColor(*brushColor))
-        qp.drawRect(QtCore.QRect(self.begin, self.end))
+        qp.setPen(QtGui.QPen(QtGui.QColor('blue'), lineWidth)) # "lineWidth" means the line width of the rectangle's border
+        qp.setBrush(QtGui.QColor(*brushColor)) # "*" unpacks the tuple to be 4 arguments
+        qp.drawRect(QtCore.QRect(self.begin, self.end)) # draws a rectangle based on top left and bottom right corners of the rectangle
 
     def keyPressEvent(self, event):
-        if event.key() == QtCore.Qt.Key_Escape:
+        if event.key() == QtCore.Qt.Key_Escape: # if escape key is pressed, close snipping window and return to main GUI
             QApplication.restoreOverrideCursor()
             self.close()
             self.parent.show()
-        event.accept()
+        event.accept() # this means to pass the event of the current mouse click to mousePressEvent()
 
     def mousePressEvent(self, event):
-        self.startPos = self.mouse.position
-
-        self.begin = event.pos()
-        self.end = self.begin
-        self.update()
+        self.startPos = self.mouse.position # (x,y) with respect to the monitor
+        self.begin = event.pos() # (x,y) with respect to the snipping window opened Which is approximately the same size as the monitor
+        self.end = self.begin # sets begin and end points to same point since we just pressed left click and didn't move the mouse
+        self.update() # updates the window and the rectangle (for example, calls functions like paintEvent())
 
     def mouseMoveEvent(self, event):
-        self.end = event.pos()
+        self.end = event.pos() # changes end point (top left or bottom right corner) to current mouse position in the snipping window
         self.update()
 
     def mouseReleaseEvent(self, event):
         self.isSnipping = False
-        QApplication.restoreOverrideCursor()
+        QApplication.restoreOverrideCursor() # restores the original cursor instead of "+"
 
         startPos = self.startPos
         endPos = self.mouse.position
 
+        # this is to make sure (x1,y1) is the top left corner and (x2,y2) is the bottom right corner of the rectangle
         x1 = min(startPos[0], endPos[0])
         y1 = min(startPos[1], endPos[1])
         x2 = max(startPos[0], endPos[0])
         y2 = max(startPos[1], endPos[1])
 
-        self.repaint()
-        QApplication.processEvents()
-        img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
+        self.repaint() # same as self.update() but repaint() forces an immediate repaint, whereas update() schedules a paint event for when Qt next processes events.
+        QApplication.processEvents() # function that returns after all available events have been processed. Done to make sure the image is obtained based on the very last rectangle drawn on the screen
+        self.parent.img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
         QApplication.processEvents()
 
-        self.close()
+        self.close() # closes the snipping window that approximately covers the monitor
         self.begin = QtCore.QPoint()
         self.end = QtCore.QPoint()
-        self.parent.returnFromSnip(img)
+
+        self.parent.predictLatex(self.parent.img)
 
 
 

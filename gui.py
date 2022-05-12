@@ -28,7 +28,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
         self.img = None
         self.webView = None
         self.snipWidget = SnipWidget(self) # object of SnipWidget Class, "self" here is this current "App" object that will be sent to the created SnipWidget object
-        self.model = keras.models.load_model("nnModel") 
+        self.model = keras.models.load_model("ThennModel") 
         with open("numsToLatex.pickle", 'rb') as f:
             self.numsToLatex = pickle.load(f)
         self.initUI()
@@ -104,13 +104,14 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
     def predictLatex(self, img=None):
         self.show() # Displays the main GUI window after it has been closed by snipImg()
-        symbols = extractSymbols(imgOrig=img, showSteps=False, returnSteps=False) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
+        symbols = extractSymbols(imgOrig=img, showSteps=True, medFilter=True) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
         prediction = ""
         for symbol in symbols:
             label = np.argmax(self.model.predict(symbol))
             latex = self.numsToLatex[label]
             print(latex) # Debugging
-            prediction += latex
+            prediction += latex + ' '
+        prediction = prediction.replace('\X', 'X')
         print(prediction)
         self.displayPrediction(prediction)
 

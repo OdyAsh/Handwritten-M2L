@@ -13,7 +13,7 @@ from screeninfo import get_monitors
 from pynput.mouse import Controller
 from PIL import ImageGrab
 import numpy as np
-
+# App object here is the environment. The info on the monitor is also considered from the enviornment since the input images are taken from it
 class App(QMainWindow): # Using QMainWindow as super class because it contains methods not present in the base class "QWidgets" like "self.setCentralWidget()"
 
     def __init__(self):
@@ -88,13 +88,13 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
 
     @pyqtSlot() #decorator function that runs some built-in code (used for buttons) before (and after) snip()'s execution 
-    def snipImg(self):
+    def snipImg(self): # Sensor (Perceptor) Function
         self.close()
         self.snipWidget.snip()
 
 
     @pyqtSlot()
-    def loadImg(self):
+    def loadImg(self): # Sensor (Perceptor) Function
         currDirectory = os.path.abspath(os.getcwd()) # gets path of current py file
         imgsDirectory = os.path.join(currDirectory, "tests") # concatenates tests folder to that path
         fname = QFileDialog.getOpenFileName(self, "Open file", 
@@ -103,7 +103,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
         self.img =  cv2.imread(fname[0]) # setting the img attribute in case it will be used later
         self.predictLatex(self.img)
 
-    def predictLatex(self, img=None):
+    def predictLatex(self, img=None): # Agent Function
         self.show() # Displays the main GUI window after it has been closed by snipImg()
         symbols = extractSymbols(imgOrig=img, showSteps=True, medFilter=True) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
         prediction = ""
@@ -118,7 +118,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
 
     @pyqtSlot() 
-    def displayPrediction(self, prediction = None):
+    def displayPrediction(self, prediction = None): # Actuator Function
         if prediction is not None:
             self.textbox.setText("${equation}$".format(equation=prediction))
         else:
@@ -162,7 +162,7 @@ class SnipWidget(QMainWindow):
 
         self.mouse = Controller() # a controller for sending virtual mouse events to the system. Useful attribute: "position"
 
-    def snip(self):
+    def snip(self): # Sensor (Perceptor) Function
         self.isSnipping = True
         self.setWindowFlags(Qt.WindowStaysOnTopHint) # hints are used to customize the appearance of top-level windows, while "WindowStaysOnTopHint" is a flag that Informs the window system that the snipping window should stay on top of all other windows
         QApplication.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CrossCursor)) # changes cursor to look like a "+" (Cross Cursor)
@@ -216,14 +216,9 @@ class SnipWidget(QMainWindow):
 
         self.repaint() # same as self.update() but repaint() forces an immediate repaint, whereas update() schedules a paint event for when Qt next processes events.
         QApplication.processEvents() # function that returns after all available events have been processed. Done to make sure the image is obtained based on the very last rectangle drawn on the screen
-        self.parent.img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
-        QApplication.processEvents()
-
+        self.parent.img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True) # extracts a PIL image from the created rectangle's area
         self.close() # closes the snipping window that approximately covers the monitor
-        self.begin = QtCore.QPoint()
-        self.end = QtCore.QPoint()
-
-        self.parent.predictLatex(self.parent.img)
+        self.parent.predictLatex(self.parent.img) # calls the predictLatex() function in "App" parent object and passes the snipped image for the called function to predict the latex equivalent of that image
 
 
 

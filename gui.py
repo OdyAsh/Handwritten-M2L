@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import cv2
 import pickle
 from imgPreProcess import extractSymbols # Imports extractSymbols() from imgPreProcess.py to process the input image to be compatible with the NN model
@@ -9,7 +8,6 @@ from tensorflow import keras
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QPushButton, QDesktopWidget, QTextEdit, QFileDialog 
 from PyQt5.QtWebEngineWidgets import QWebEngineView # pip install PyQtWebEngine to be able to import this
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSlot, Qt
 from screeninfo import get_monitors
 from pynput.mouse import Controller
@@ -27,6 +25,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
         self.height = 400
         self.img = None
         self.webView = None
+        self.textbox = None
         self.snipWidget = SnipWidget(self) # object of SnipWidget Class, "self" here is this current "App" object that will be sent to the created SnipWidget object
         self.model = keras.models.load_model("ThennModel") 
         with open("numsToLatex.pickle", 'rb') as f:
@@ -57,7 +56,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
         # Creates load image button
         btnLoad = QPushButton("Load Image", self)
-        btnLoad.setToolTip('This is to load an image of a math equation from a folder locally')
+        btnLoad.setToolTip('This is to load an image from a folder locally')
         btnLoad.setMinimumHeight(40)
         btnLoad.clicked.connect(self.loadImg) 
 
@@ -98,7 +97,9 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
     def loadImg(self):
         currDirectory = os.path.abspath(os.getcwd()) # gets path of current py file
         imgsDirectory = os.path.join(currDirectory, "tests") # concatenates tests folder to that path
-        fname = QFileDialog.getOpenFileName(self, "Open file", imgsDirectory, "Image files (*.jpg *.png)") # "fname" is a tuple consisting of the chosen path e.g. "C:\img.png" and the string "Image files (*.jpg *.png)" 
+        fname = QFileDialog.getOpenFileName(self, "Open file", 
+                                            imgsDirectory, 
+                                            "Image files (*.jpg *.png)") # "fname" is a tuple consisting of the chosen path e.g. "C:\img.png" and the string "Image files (*.jpg *.png)" 
         self.img =  cv2.imread(fname[0]) # setting the img attribute in case it will be used later
         self.predictLatex(self.img)
 
@@ -143,18 +144,19 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
 
 class SnipWidget(QMainWindow):
-    isSnipping = False
 
     def __init__(self, parent):
         super().__init__()
+        self.isSnipping = False
         self.parent = parent # "parent" here is the "App" object that called this class
 
-        monitos = get_monitors() # gets monitor's x and y position of top left rectangle corner, and the rectangle's (montior's) width and height
-        bboxes = np.array([[m.x, m.y, m.width, m.height] for m in monitos]) # the for loop is in case there are multiple monitors
+        monitors = get_monitors() # gets monitor's x and y position of top left rectangle corner, and the rectangle's (montior's) width and height
+        bboxes = np.array([[m.x, m.y, m.width, m.height] for m in monitors]) # the for loop is in case there are multiple monitors
         x, y, _, _ = bboxes.min(0) # retrieves the positions of the smallest x,y pair ("0" means sort on 0-axis: [1,2,3,4] and [1,2,0,8] will return [1,2,3,4] array as 0 < 3 but 4 < 8, while min(1) will return [1,0])
         w, h = bboxes[:, [0, 2]].sum(1).max(), bboxes[:, [1, 3]].sum(1).max() # obtains max xPoint+width and max yPoint+height which corresponds to a width and height covering all the monitors
         self.setGeometry(x, y, w-x, h-y) # sets the new snipping window with obtained x,y,w,h
 
+        self.startPos = None
         self.begin = QtCore.QPoint()
         self.end = QtCore.QPoint()
 
@@ -184,10 +186,10 @@ class SnipWidget(QMainWindow):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape: # if escape key is pressed, close snipping window and return to main GUI
-            QApplication.restoreOverrideCursor()
+            QApplication.restoreOverrideCursor() # restores the original cursor instead of "+"
             self.close()
             self.parent.show()
-        event.accept() # this means to pass the event of the current mouse click to mousePressEvent()
+        event.accept() # this means to pass the event of the current keyboard click which is equivalent to releasing mouse click so it calls mouseReleaseEvent()
 
     def mousePressEvent(self, event):
         self.startPos = self.mouse.position # (x,y) with respect to the monitor

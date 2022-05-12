@@ -10,19 +10,19 @@ def extractSymbols(imgOrig: Union[Image.Image, np.ndarray], showSteps = False,
     debugImgSteps = []
     if isinstance(imgOrig, Image.Image): # if true, then "imgOrig" is a PIL Image object, not a CV image (ndarray) object so we will convert it
         imgOrig = np.array(imgOrig)[:, :, ::-1] # the "-1" is to get the ndarray as BGR not RGB, as the PIL image was originally in RGB
-    imgGray = cv2.cvtColor(imgOrig,cv2.COLOR_BGR2GRAY)
+    imgGray = cv2.cvtColor(imgOrig,cv2.COLOR_BGR2GRAY) # converts image from BGR to grayscale 
     if medFilter:
-        imgGray = cv2.medianBlur(imgGray, 5)
+        imgGray = cv2.medianBlur(imgGray, 5) # performs median filter with 5x5 filter size
         debugImgSteps.append(imgGray)
     
-    imgCanny = cv2.Canny(imgGray, 50,180)
+    imgCanny = cv2.Canny(imgGray, 50,180) # performs canny edge detection with low threshold as 50 and high threshold as 180
     debugImgSteps.append(imgCanny)
 
     kernel = np.ones((5,5), np.uint8)
-    imgDilated = cv2.dilate(imgCanny, kernel, iterations=5)
+    imgDilated = cv2.dilate(imgCanny, kernel, iterations=5) # dilating the image 5 times to connect symbols (e.g. "=" instead of 2 "-")
     debugImgSteps.append(imgDilated)
 
-    contours, _= cv2.findContours(imgDilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours, _= cv2.findContours(imgDilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) # returns contours which the bounding boxes of each symbol will be extracted from
 
     boundingBoxes = []
     for contour in contours:
@@ -34,9 +34,9 @@ def extractSymbols(imgOrig: Union[Image.Image, np.ndarray], showSteps = False,
     key_leftRightTopBottom = cmp_to_key(leftRightTopBottom) # Wrapper to allow a custom function with 2 parameters to be the key function when sorting
     
     if (verticalSymbols):
-        boundingBoxes = sorted(boundingBoxes, key=key_leftRightTopBottom)
+        boundingBoxes = sorted(boundingBoxes, key=key_leftRightTopBottom) # sort with priority on y-coordinate
     else:
-        boundingBoxes = sorted(boundingBoxes, key=lambda x : x[0])
+        boundingBoxes = sorted(boundingBoxes, key=lambda x : x[0]) # sort with priority on x-coordinate
 
     symbols = []
     for box in boundingBoxes:

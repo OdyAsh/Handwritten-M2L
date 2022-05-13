@@ -3,5 +3,6 @@ opencv_python==4.5.5.64
 Pillow==9.1.0
 pynput==1.7.6
 PyQt5==5.15.6
+PyQtWebEngine==5.15.2
 screeninfo==0.8
 tensorflow==2.8.0

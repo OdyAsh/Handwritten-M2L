@@ -105,7 +105,7 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
 
     def predictLatex(self, img=None): # Agent Function
         self.show() # Displays the main GUI window after it has been closed by snipImg()
-        symbols = extractSymbols(imgOrig=img, showSteps=True, medFilter=True) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
+        symbols = extractSymbols(imgOrig=img, showSteps=True, medFilter=True, verticalSymbols=False) # Processes image (by returning list of cropped math symbols) to be a compatible input for the NN model
         prediction = ""
         for symbol in symbols:
             label = np.argmax(self.model.predict(symbol))
@@ -214,11 +214,18 @@ class SnipWidget(QMainWindow):
         x2 = max(startPos[0], endPos[0])
         y2 = max(startPos[1], endPos[1])
 
+
         self.repaint() # same as self.update() but repaint() forces an immediate repaint, whereas update() schedules a paint event for when Qt next processes events.
         QApplication.processEvents() # function that returns after all available events have been processed. Done to make sure the image is obtained based on the very last rectangle drawn on the screen
         self.parent.img = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True) # extracts a PIL image from the created rectangle's area
+        QApplication.processEvents()
+
         self.close() # closes the snipping window that approximately covers the monitor
+        self.begin = QtCore.QPoint() # returns rectangle to just a point, in order for the previous rectangle not to appear when clicking on the snip button again
+        self.end = QtCore.QPoint()
+
         self.parent.predictLatex(self.parent.img) # calls the predictLatex() function in "App" parent object and passes the snipped image for the called function to predict the latex equivalent of that image
+
 
 
 

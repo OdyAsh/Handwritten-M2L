@@ -74,9 +74,6 @@ class App(QMainWindow): # Using QMainWindow as super class because it contains m
         hBox.addWidget(btnLoad)
         vBox.addLayout(hBox)
 
-        settings = QFormLayout()
-        vBox.addLayout(settings)
-
         self.show()
     
     def centerApp(self): # centers application

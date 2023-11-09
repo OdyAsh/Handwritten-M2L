@@ -3,7 +3,7 @@
 Handwritten-M2L is a Python GUI-based application that turns very basic handwritten math equations into LaTeX. The application uses a deep learning model to recognize handwritten symbols, which are extracted using image processing techniques. The symbols are then processed in a sequential manner to generate the corresponding LaTeX expressions.
 
 Please note that this README is a general overview. For more specific details about the project, you can refer to the 
-[project document](./G12_Ashraf196280_Farah194233_Jacinta206562.docx)
+[project document](./G12_Ashraf196280_Farah194233_Jacinta206562.pdf)
 
 ## Workflow
 
